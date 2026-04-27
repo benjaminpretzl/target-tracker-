@@ -3,25 +3,24 @@ import { NextRequest } from 'next/server'
 
 export async function GET(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(id)
-  if (!project) return Response.json({ error: 'Not found' }, { status: 404 })
-  return Response.json(project)
+  const result = await db.execute({ sql: 'SELECT * FROM projects WHERE id = ?', args: [id] })
+  if (!result.rows[0]) return Response.json({ error: 'Not found' }, { status: 404 })
+  return Response.json(result.rows[0])
 }
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   const { name, description } = await req.json()
-  db.prepare('UPDATE projects SET name = COALESCE(?, name), description = COALESCE(?, description) WHERE id = ?').run(
-    name?.trim() || null,
-    description?.trim() ?? undefined,
-    id,
-  )
-  const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(id)
-  return Response.json(project)
+  await db.execute({
+    sql: 'UPDATE projects SET name = COALESCE(?, name), description = COALESCE(?, description) WHERE id = ?',
+    args: [name?.trim() || null, description?.trim() ?? null, id],
+  })
+  const result = await db.execute({ sql: 'SELECT * FROM projects WHERE id = ?', args: [id] })
+  return Response.json(result.rows[0])
 }
 
 export async function DELETE(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  db.prepare('DELETE FROM projects WHERE id = ?').run(id)
+  await db.execute({ sql: 'DELETE FROM projects WHERE id = ?', args: [id] })
   return new Response(null, { status: 204 })
 }

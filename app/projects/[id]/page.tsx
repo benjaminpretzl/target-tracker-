@@ -10,18 +10,20 @@ export const dynamic = 'force-dynamic'
 export default async function ProjectPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
 
-  const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(id) as Project | undefined
+  const projectResult = await db.execute({ sql: 'SELECT * FROM projects WHERE id = ?', args: [id] })
+  const project = projectResult.rows[0] as unknown as Project | undefined
   if (!project) notFound()
 
-  const tasks = db
-    .prepare(
-      `SELECT t.*, m.name AS assignee_name
-       FROM tasks t LEFT JOIN team_members m ON t.assignee_id = m.id
-       WHERE t.project_id = ? ORDER BY t.created_at ASC`,
-    )
-    .all(id) as TaskWithAssignee[]
+  const tasksResult = await db.execute({
+    sql: `SELECT t.*, m.name AS assignee_name
+          FROM tasks t LEFT JOIN team_members m ON t.assignee_id = m.id
+          WHERE t.project_id = ? ORDER BY t.created_at ASC`,
+    args: [id],
+  })
+  const tasks = tasksResult.rows as unknown as TaskWithAssignee[]
 
-  const members = db.prepare('SELECT * FROM team_members ORDER BY name ASC').all() as TeamMember[]
+  const membersResult = await db.execute('SELECT * FROM team_members ORDER BY name ASC')
+  const members = membersResult.rows as unknown as TeamMember[]
 
   return (
     <div>

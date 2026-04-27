@@ -1,26 +1,25 @@
 import { db } from '@/db/db'
+import { InValue } from '@libsql/client'
 import { NextRequest } from 'next/server'
 
 export async function GET(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  const task = db
-    .prepare(
-      `SELECT t.*, m.name AS assignee_name
-       FROM tasks t LEFT JOIN team_members m ON t.assignee_id = m.id
-       WHERE t.id = ?`,
-    )
-    .get(id)
-  if (!task) return Response.json({ error: 'Not found' }, { status: 404 })
+  const taskResult = await db.execute({
+    sql: `SELECT t.*, m.name AS assignee_name
+          FROM tasks t LEFT JOIN team_members m ON t.assignee_id = m.id
+          WHERE t.id = ?`,
+    args: [id],
+  })
+  if (!taskResult.rows[0]) return Response.json({ error: 'Not found' }, { status: 404 })
 
-  const subtasks = db
-    .prepare(
-      `SELECT t.*, m.name AS assignee_name
-       FROM tasks t LEFT JOIN team_members m ON t.assignee_id = m.id
-       WHERE t.parent_task_id = ? ORDER BY t.created_at ASC`,
-    )
-    .all(id)
+  const subtasksResult = await db.execute({
+    sql: `SELECT t.*, m.name AS assignee_name
+          FROM tasks t LEFT JOIN team_members m ON t.assignee_id = m.id
+          WHERE t.parent_task_id = ? ORDER BY t.created_at ASC`,
+    args: [id],
+  })
 
-  return Response.json({ ...task as object, subtasks })
+  return Response.json({ ...taskResult.rows[0], subtasks: subtasksResult.rows })
 }
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -28,36 +27,35 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const body = await req.json()
 
   const allowed = ['title', 'description', 'status', 'priority', 'due_date', 'assignee_id'] as const
-  const updates: string[] = []
-  const values: unknown[] = []
+  const setClauses: string[] = []
+  const args: InValue[] = []
 
   for (const key of allowed) {
     if (key in body) {
-      updates.push(`${key} = ?`)
-      values.push(body[key] ?? null)
+      setClauses.push(`${key} = ?`)
+      args.push((body[key] ?? null) as InValue)
     }
   }
 
-  if (updates.length === 0) return Response.json({ error: 'Nothing to update' }, { status: 400 })
+  if (setClauses.length === 0) return Response.json({ error: 'Nothing to update' }, { status: 400 })
 
-  updates.push("updated_at = datetime('now')")
-  values.push(id)
+  setClauses.push("updated_at = datetime('now')")
+  args.push(id)
 
-  db.prepare(`UPDATE tasks SET ${updates.join(', ')} WHERE id = ?`).run(...values)
+  await db.execute({ sql: `UPDATE tasks SET ${setClauses.join(', ')} WHERE id = ?`, args })
 
-  const task = db
-    .prepare(
-      `SELECT t.*, m.name AS assignee_name
-       FROM tasks t LEFT JOIN team_members m ON t.assignee_id = m.id
-       WHERE t.id = ?`,
-    )
-    .get(id)
+  const result = await db.execute({
+    sql: `SELECT t.*, m.name AS assignee_name
+          FROM tasks t LEFT JOIN team_members m ON t.assignee_id = m.id
+          WHERE t.id = ?`,
+    args: [id],
+  })
 
-  return Response.json(task)
+  return Response.json(result.rows[0])
 }
 
 export async function DELETE(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  db.prepare('DELETE FROM tasks WHERE id = ?').run(id)
+  await db.execute({ sql: 'DELETE FROM tasks WHERE id = ?', args: [id] })
   return new Response(null, { status: 204 })
 }

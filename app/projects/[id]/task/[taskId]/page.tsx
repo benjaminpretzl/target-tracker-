@@ -15,30 +15,32 @@ export default async function TaskPage({
 }) {
   const { id, taskId } = await params
 
-  const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(id) as Project | undefined
+  const projectResult = await db.execute({ sql: 'SELECT * FROM projects WHERE id = ?', args: [id] })
+  const project = projectResult.rows[0] as unknown as Project | undefined
   if (!project) notFound()
 
-  const task = db
-    .prepare(
-      `SELECT t.*, m.name AS assignee_name
-       FROM tasks t LEFT JOIN team_members m ON t.assignee_id = m.id
-       WHERE t.id = ? AND t.project_id = ?`,
-    )
-    .get(taskId, id) as TaskWithAssignee | undefined
+  const taskResult = await db.execute({
+    sql: `SELECT t.*, m.name AS assignee_name
+          FROM tasks t LEFT JOIN team_members m ON t.assignee_id = m.id
+          WHERE t.id = ? AND t.project_id = ?`,
+    args: [taskId, id],
+  })
+  const task = taskResult.rows[0] as unknown as TaskWithAssignee | undefined
   if (!task) notFound()
 
-  const subtasks = db
-    .prepare(
-      `SELECT t.*, m.name AS assignee_name
-       FROM tasks t LEFT JOIN team_members m ON t.assignee_id = m.id
-       WHERE t.parent_task_id = ? ORDER BY t.created_at ASC`,
-    )
-    .all(taskId) as TaskWithAssignee[]
+  const subtasksResult = await db.execute({
+    sql: `SELECT t.*, m.name AS assignee_name
+          FROM tasks t LEFT JOIN team_members m ON t.assignee_id = m.id
+          WHERE t.parent_task_id = ? ORDER BY t.created_at ASC`,
+    args: [taskId],
+  })
+  const subtasks = subtasksResult.rows as unknown as TaskWithAssignee[]
 
-  const members = db.prepare('SELECT * FROM team_members ORDER BY name ASC').all() as TeamMember[]
+  const membersResult = await db.execute('SELECT * FROM team_members ORDER BY name ASC')
+  const members = membersResult.rows as unknown as TeamMember[]
 
   const parentTask = task.parent_task_id
-    ? (db.prepare('SELECT * FROM tasks WHERE id = ?').get(task.parent_task_id) as TaskWithAssignee | undefined)
+    ? ((await db.execute({ sql: 'SELECT * FROM tasks WHERE id = ?', args: [task.parent_task_id] })).rows[0] as unknown as TaskWithAssignee | undefined)
     : null
 
   return (

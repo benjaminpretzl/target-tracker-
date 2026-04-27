@@ -5,8 +5,9 @@ import CreateProjectDialog from '@/components/create-project-dialog'
 
 export const dynamic = 'force-dynamic'
 
-export default function HomePage() {
-  const projects = db.prepare('SELECT * FROM projects ORDER BY created_at DESC').all() as Project[]
+export default async function HomePage() {
+  const result = await db.execute('SELECT * FROM projects ORDER BY created_at DESC')
+  const projects = result.rows as unknown as Project[]
 
   return (
     <div>

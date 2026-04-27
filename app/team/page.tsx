@@ -5,8 +5,9 @@ import AddMemberForm from '@/components/team/add-member-form'
 
 export const dynamic = 'force-dynamic'
 
-export default function TeamPage() {
-  const members = db.prepare('SELECT * FROM team_members ORDER BY name ASC').all() as TeamMember[]
+export default async function TeamPage() {
+  const result = await db.execute('SELECT * FROM team_members ORDER BY name ASC')
+  const members = result.rows as unknown as TeamMember[]
 
   return (
     <div className="max-w-xl">
